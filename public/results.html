@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Results — Veridict</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zilla+Slab:wght@500;600;700&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/app.css">
+<style>
+.motion-block{padding:20px 0;border-bottom:1px solid var(--rule)}
+.motion-block h1{font-size:clamp(21px,2.8vw,30px);max-width:24ch;margin-top:8px}
+.motion-block h1::before{content:"“"} .motion-block h1::after{content:"”"}
+.cols{display:grid;grid-template-columns:1fr 320px;gap:38px;align-items:start}
+.result{
+  display:flex;align-items:center;gap:16px;background:var(--card);
+  border:1px solid var(--rule-soft);border-left:3px solid var(--rule);
+  border-radius:3px;padding:14px 18px;margin-bottom:9px;box-shadow:var(--shadow);
+}
+.result .place{
+  font-family:var(--mono);font-size:26px;font-weight:700;
+  font-variant-numeric:tabular-nums;min-width:38px;
+}
+.result .tname{font-family:var(--display);font-size:17px;font-weight:600;display:block}
+.result .avg{margin-left:auto;text-align:right}
+.result .avg b{font-family:var(--mono);font-size:15px;font-variant-numeric:tabular-nums}
+.rfd{
+  background:var(--card);border:1px solid var(--rule-soft);
+  border-left:2px solid var(--amber);border-radius:3px;
+  padding:15px 17px;margin-bottom:11px;
+}
+.rfd .judge{font-family:var(--mono);font-size:10px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--ink-faint);display:block;margin-bottom:6px}
+.rfd p{font-size:13.5px;color:var(--ink-soft);margin:0;line-height:1.6}
+@media (max-width:860px){.cols{grid-template-columns:1fr;gap:28px}}
+</style>
+</head>
+<body>
+<div class="shell">
+  <header class="masthead" id="masthead"></header>
+  <div class="notice" id="error" hidden></div>
+
+  <div id="page" hidden>
+    <section class="motion-block">
+      <span class="eyebrow">Result</span>
+      <h1 id="motion">…</h1>
+    </section>
+
+    <div class="cols mt-3">
+      <main>
+        <div class="section-head"><h2>Team ranking</h2>
+          <span class="eyebrow">Averaged across the panel</span></div>
+        <div id="teams"></div>
+
+        <div class="section-head mt-3"><h2>Reasons for decision</h2></div>
+        <div id="reasons"></div>
+      </main>
+
+      <aside>
+        <div class="section-head"><h2>Speaker scores</h2></div>
+        <div class="card"><div id="speakers"></div></div>
+      </aside>
+    </div>
+  </div>
+
+  <footer class="footer">Veridict</footer>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+(async () => {
+  const roundId = qs('round');
+  if (!roundId) { location.href = '/app'; return; }
+  const user = await requireUser();
+  if (!user) return;
+  await mountNav('/app');
+
+  try {
+    const r = await api.get(`/rounds/${roundId}/results`);
+    $('#page').hidden = false;
+    $('#motion').textContent = r.round.motion;
+
+    const ordinal = n => ['1st','2nd','3rd','4th','5th','6th'][n-1] || n + 'th';
+    const ranked = r.teams.filter(t => t.avg_rank !== null);
+
+    $('#teams').innerHTML = ranked.length ? ranked.map((t, i) => `
+      <div class="result${i === 0 ? ' side-gov' : ''}">
+        <span class="place">${i + 1}</span>
+        <div>
+          <span class="tname">${esc(t.name)}</span>
+          <span class="eyebrow">${ordinal(Math.round(t.avg_rank))} on ${t.ballots} ${t.ballots === 1 ? 'ballot' : 'ballots'}</span>
+        </div>
+        <div class="avg">
+          <span class="eyebrow">Avg rank</span>
+          <b>${Number(t.avg_rank).toFixed(2)}</b>
+        </div>
+      </div>`).join('')
+      : '<div class="empty"><h3>No ballots in yet</h3><p>Results appear as judges submit.</p></div>';
+
+    $('#speakers').innerHTML = r.speakers.some(s => s.avg !== null) ? `
+      <table>
+        <thead><tr><th>Speech</th><th style="text-align:right">Avg</th></tr></thead>
+        <tbody>${r.speakers.map(s => `
+          <tr>
+            <td><b>${esc(s.short_label)}</b><br>
+                <span class="small muted">${esc(s.speaker_name || '—')}</span></td>
+            <td class="n">${s.avg ?? '—'}</td>
+          </tr>`).join('')}</tbody>
+      </table>`
+      : '<p class="muted small" style="margin:0">No speaker scores recorded.</p>';
+
+    $('#reasons').innerHTML = r.reasons.length ? r.reasons.map(x => `
+      <div class="rfd">
+        <span class="judge">${esc(x.judge)}</span>
+        <p>${esc(x.reasoning)}</p>
+      </div>`).join('')
+      : '<p class="muted small">No written reasons submitted.</p>';
+
+  } catch (err) {
+    showError(err.message);
+  }
+})();
+</script>
+</body>
+</html>

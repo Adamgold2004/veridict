@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tab room — Veridict</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zilla+Slab:wght@500;600;700&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/app.css">
+<style>
+.cols{display:grid;grid-template-columns:1fr 340px;gap:38px;align-items:start}
+.slotrow{display:flex;align-items:center;gap:11px;margin-bottom:8px}
+.slotrow .lbl{
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--ink-faint);min-width:130px;
+}
+.slotrow select{flex:1}
+.rnd{
+  background:var(--card);border:1px solid var(--rule-soft);
+  border-left:3px solid var(--rule);border-radius:3px;
+  padding:14px 17px;margin-bottom:10px;box-shadow:var(--shadow);
+}
+.rnd.live{border-left-color:var(--claret)}
+.rnd.completed{border-left-color:var(--sage)}
+.rnd .m{font-family:var(--display);font-size:15px;font-weight:600;margin:5px 0 10px}
+.rnd .acts{display:flex;gap:7px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+<div class="shell">
+  <header class="masthead" id="masthead"></header>
+
+  <div class="mt-3">
+    <span class="eyebrow">Organiser tools</span>
+    <h1>Tab room</h1>
+  </div>
+
+  <div class="notice" id="error" hidden></div>
+
+  <div class="cols mt-3">
+    <main>
+      <div class="section-head">
+        <h2>Rounds</h2>
+        <span class="eyebrow" id="t-name-label"></span>
+      </div>
+      <div id="rounds"></div>
+
+      <div class="section-head mt-3"><h2>Schedule a round</h2></div>
+      <div class="card">
+        <div class="field">
+          <label for="motion">Motion</label>
+          <input type="text" id="motion" placeholder="This house would…">
+        </div>
+        <div class="row" style="gap:12px;align-items:flex-start">
+          <div class="field grow">
+            <label for="room">Room</label>
+            <input type="text" id="room" placeholder="B12">
+          </div>
+          <div class="field grow">
+            <label for="stage">Stage</label>
+            <select id="stage">
+              <option value="prelim">Preliminary</option>
+              <option value="quarter">Quarter-final</option>
+              <option value="semi">Semi-final</option>
+              <option value="final">Final</option>
+            </select>
+          </div>
+        </div>
+        <label>Team allocation</label>
+        <div id="slots" class="mt-1"></div>
+        <label class="mt-2">Judges</label>
+        <div id="judges" class="mt-1"></div>
+        <button class="btn mt-2" id="create-round">Schedule round</button>
+      </div>
+    </main>
+
+    <aside>
+      <div class="section-head"><h2>Tournament</h2></div>
+      <div class="card">
+        <div class="field">
+          <label for="tsel">Working on</label>
+          <select id="tsel"></select>
+        </div>
+        <hr style="border:none;border-top:1px solid var(--rule-soft);margin:16px 0">
+        <label>Create a new one</label>
+        <div class="field mt-1">
+          <input type="text" id="tname" placeholder="Michaelmas Intervarsity">
+        </div>
+        <div class="field">
+          <select id="tformat"></select>
+        </div>
+        <button class="btn ghost full small" id="create-t">Create tournament</button>
+      </div>
+
+      <div class="section-head mt-3"><h2>Add a team</h2></div>
+      <div class="card">
+        <div class="field"><input type="text" id="team-name" placeholder="Team name"></div>
+        <div class="field"><input type="text" id="team-inst" placeholder="Institution"></div>
+        <div class="field"><input type="email" id="sp1" placeholder="Speaker 1 email"></div>
+        <div class="field"><input type="email" id="sp2" placeholder="Speaker 2 email"></div>
+        <button class="btn ghost full small" id="create-team">Add team</button>
+        <p class="small muted mt-2" style="margin-bottom:0">
+          Speakers who haven't registered yet get a placeholder account, so you
+          aren't blocked waiting on sign-ups.
+        </p>
+      </div>
+    </aside>
+  </div>
+
+  <footer class="footer">Veridict</footer>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+(async () => {
+  const user = await requireUser(['admin']);
+  if (!user) return;
+  await mountNav('/tab');
+
+  let tournaments = [], formats = [], currentT = null, teams = [], rounds = [];
+
+  const SLOTS_BP = ['Opening Government','Opening Opposition',
+                    'Closing Government','Closing Opposition'];
+
+  async function boot() {
+    formats = (await api.get('/formats')).formats;
+    $('#tformat').innerHTML = formats.map(f =>
+      `<option value="${f.id}">${esc(f.name)}</option>`).join('');
+
+    tournaments = (await api.get('/tournaments')).tournaments;
+    if (!tournaments.length) {
+      $('#tsel').innerHTML = '<option>No tournaments yet</option>';
+      $('#rounds').innerHTML =
+        '<div class="empty"><h3>Create a tournament first</h3><p>Rounds need a tournament to belong to.</p></div>';
+      return;
+    }
+    $('#tsel').innerHTML = tournaments.map(t =>
+      `<option value="${t.id}">${esc(t.name)}</option>`).join('');
+    const pre = qs('tournament');
+    if (pre && tournaments.some(t => t.id === pre)) $('#tsel').value = pre;
+    await loadTournament($('#tsel').value);
+  }
+
+  async function loadTournament(id) {
+    const d = await api.get('/tournaments/' + id);
+    currentT = d.tournament; teams = d.teams; rounds = d.rounds;
+    $('#t-name-label').textContent = currentT.format_name;
+    drawRounds(); drawSlots(); await drawJudges();
+  }
+
+  function drawRounds() {
+    $('#rounds').innerHTML = rounds.length ? rounds.map(r => `
+      <div class="rnd ${esc(r.status)}">
+        <div class="spread">
+          <span class="eyebrow">Round ${r.sequence}${r.room ? ' · ' + esc(r.room) : ''}</span>
+          <span class="pill ${esc(r.status)}">${esc(r.status)}</span>
+        </div>
+        <p class="m">${esc(r.motion)}</p>
+        <div class="acts">
+          ${r.status !== 'live' ? `<button class="btn small" data-go="live" data-r="${r.id}">Go live</button>` : ''}
+          ${r.status === 'live' ? `<button class="btn small" data-go="judging" data-r="${r.id}">Close speeches</button>` : ''}
+          ${r.status !== 'completed' ? `<button class="btn ghost small" data-go="completed" data-r="${r.id}">Release results</button>` : ''}
+          <a class="btn ghost small" href="/ballot?round=${r.id}">Ballot</a>
+          <a class="btn ghost small" href="/results?round=${r.id}">Results</a>
+        </div>
+      </div>`).join('')
+      : '<div class="empty"><h3>No rounds yet</h3><p>Schedule one below.</p></div>';
+
+    $$('[data-go]').forEach(b => b.onclick = async () => {
+      b.disabled = true;
+      try {
+        await api.post(`/rounds/${b.dataset.r}/status`, { status: b.dataset.go });
+        await loadTournament(currentT.id);
+      } catch (e) { showError(e.message); b.disabled = false; }
+    });
+  }
+
+  function drawSlots() {
+    const n = currentT.team_count;
+    const names = n === 4 ? SLOTS_BP : ['Proposition','Opposition'];
+    $('#slots').innerHTML = Array.from({length: n}, (_, i) => `
+      <div class="slotrow">
+        <span class="lbl">${esc(names[i] || 'Slot ' + (i+1))}</span>
+        <select data-slot="${i}">
+          <option value="">— none —</option>
+          ${teams.map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join('')}
+        </select>
+      </div>`).join('');
+  }
+
+  async function drawJudges() {
+    // Judges are picked from anyone with the judge role.
+    $('#judges').innerHTML = `
+      <div class="slotrow">
+        <span class="lbl">Chair</span>
+        <select id="j1"><option value="">— none —</option></select>
+      </div>
+      <div class="slotrow">
+        <span class="lbl">Panellist</span>
+        <select id="j2"><option value="">— none —</option></select>
+      </div>`;
+    // The API has no user directory endpoint, so reuse the demo judges
+    // already attached to existing rounds where possible.
+    const seen = new Map();
+    for (const r of rounds) {
+      try {
+        const full = (await api.get('/rounds/' + r.id)).round;
+        for (const j of full.judges) seen.set(j.id, j.display_name);
+      } catch { /* skip */ }
+    }
+    const opts = [...seen].map(([id, name]) =>
+      `<option value="${id}">${esc(name)}</option>`).join('');
+    $('#j1').innerHTML += opts;
+    $('#j2').innerHTML += opts;
+  }
+
+  $('#tsel').onchange = () => loadTournament($('#tsel').value).catch(e => showError(e.message));
+
+  $('#create-t').onclick = async () => {
+    clearError();
+    const name = $('#tname').value.trim();
+    if (!name) return showError('Give the tournament a name.');
+    try {
+      await api.post('/tournaments', { name, format_id: $('#tformat').value });
+      $('#tname').value = '';
+      showOk('Tournament created.');
+      await boot();
+    } catch (e) { showError(e.message); }
+  };
+
+  $('#create-team').onclick = async () => {
+    clearError();
+    if (!currentT) return showError('Pick a tournament first.');
+    const name = $('#team-name').value.trim();
+    if (!name) return showError('Give the team a name.');
+    const members = [$('#sp1').value.trim(), $('#sp2').value.trim()]
+      .filter(Boolean).map(email => ({ email }));
+    try {
+      await api.post(`/tournaments/${currentT.id}/teams`, {
+        name, institution: $('#team-inst').value.trim() || null, members,
+      });
+      ['#team-name','#team-inst','#sp1','#sp2'].forEach(s => $(s).value = '');
+      showOk('Team added.');
+      await loadTournament(currentT.id);
+    } catch (e) { showError(e.message); }
+  };
+
+  $('#create-round').onclick = async () => {
+    clearError();
+    if (!currentT) return showError('Pick a tournament first.');
+    const motion = $('#motion').value.trim();
+    if (!motion) return showError('A round needs a motion.');
+
+    const team_ids = $$('#slots select').map(s => s.value);
+    const judge_ids = [$('#j1')?.value, $('#j2')?.value].filter(Boolean);
+
+    try {
+      await api.post('/rounds', {
+        tournament_id: currentT.id, motion,
+        room: $('#room').value.trim() || null,
+        stage: $('#stage').value,
+        team_ids, judge_ids,
+      });
+      $('#motion').value = ''; $('#room').value = '';
+      showOk('Round scheduled.');
+      await loadTournament(currentT.id);
+    } catch (e) { showError(e.message); }
+  };
+
+  boot().catch(e => showError(e.message));
+})();
+</script>
+</body>
+</html>

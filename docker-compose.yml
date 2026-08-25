@@ -1,0 +1,32 @@
+# Runs Veridict with Postgres. For the simplest possible start, skip Docker
+# entirely: `npm install && npm run seed && npm start` uses SQLite.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: veridict
+      POSTGRES_PASSWORD: veridict
+      POSTGRES_DB: veridict
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U veridict"]
+      interval: 5s
+      retries: 10
+
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://veridict:veridict@db:5432/veridict
+      JWT_SECRET: change-me-before-deploying
+      NODE_ENV: production
+    depends_on:
+      db:
+        condition: service_healthy
+    # Seeds on first boot, then starts. Seeding is safe to repeat.
+    command: sh -c "node server/seed.js && node server/index.js"
+
+volumes:
+  pgdata:

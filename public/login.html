@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in — Veridict</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zilla+Slab:wght@500;600;700&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/app.css">
+<style>
+.auth{max-width:420px;margin:56px auto 0}
+.auth h1{font-size:30px;margin-bottom:8px}
+.auth .swap{margin-top:18px;font-size:13.5px;color:var(--ink-soft);text-align:center}
+.auth .swap button{
+  background:none;border:none;padding:0;cursor:pointer;font:inherit;
+  color:var(--ink);text-decoration:underline;
+}
+.roles{display:flex;gap:8px}
+.roles label{
+  flex:1;margin:0;padding:11px;text-align:center;cursor:pointer;
+  border:1px solid var(--rule);border-radius:3px;background:var(--card);
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--ink-soft);
+}
+.roles input{position:absolute;opacity:0;width:0;height:0}
+.roles input:checked + span{color:var(--ink)}
+.roles label:has(input:checked){border-color:var(--ink);background:var(--paper)}
+.demo-keys{
+  margin-top:26px;padding:15px 17px;background:var(--card);
+  border:1px solid var(--rule-soft);border-radius:3px;
+}
+.demo-keys h3{font-size:14px;margin-bottom:9px}
+.demo-keys button{
+  display:flex;width:100%;justify-content:space-between;gap:12px;
+  background:none;border:none;border-bottom:1px solid var(--rule-soft);
+  padding:8px 0;cursor:pointer;font:inherit;font-size:13px;text-align:left;
+}
+.demo-keys button:last-child{border-bottom:none}
+.demo-keys button:hover{color:var(--claret)}
+.demo-keys code{font-family:var(--mono);font-size:11px;color:var(--ink-faint)}
+</style>
+</head>
+<body>
+<div class="shell">
+  <header class="masthead" id="masthead"></header>
+
+  <div class="auth">
+    <span class="eyebrow" id="kicker">Welcome back</span>
+    <h1 id="title">Sign in</h1>
+    <p class="muted small" id="sub">Your ballots and rounds are waiting.</p>
+
+    <div class="notice" id="error" hidden></div>
+
+    <form id="form" class="mt-3">
+      <div class="field name-only hide">
+        <label for="display_name">Full name</label>
+        <input type="text" id="display_name" autocomplete="name">
+      </div>
+
+      <div class="field name-only hide">
+        <label for="institution">Institution</label>
+        <input type="text" id="institution" autocomplete="organization"
+               placeholder="Trinity College">
+      </div>
+
+      <div class="field">
+        <label for="email">Email</label>
+        <input type="email" id="email" required autocomplete="email">
+      </div>
+
+      <div class="field">
+        <label for="password">Password</label>
+        <input type="password" id="password" required autocomplete="current-password">
+      </div>
+
+      <div class="field name-only hide">
+        <label>I am joining as</label>
+        <div class="roles">
+          <label><input type="radio" name="role" value="debater" checked><span>Debater</span></label>
+          <label><input type="radio" name="role" value="judge"><span>Judge</span></label>
+        </div>
+      </div>
+
+      <button class="btn full" type="submit" id="submit">Sign in</button>
+    </form>
+
+    <p class="swap">
+      <span id="swap-text">New here?</span>
+      <button type="button" id="swap">Create an account</button>
+    </p>
+
+    <div class="demo-keys" id="demo-keys">
+      <h3>Demo accounts</h3>
+      <p class="small muted" style="margin-bottom:10px">Tap one to fill the form.</p>
+      <button data-e="admin@veridict.local" data-p="admin1234">
+        <span>Tab room <span class="muted">· admin</span></span><code>admin1234</code></button>
+      <button data-e="judge@veridict.local" data-p="judge1234">
+        <span>Ade Bakare <span class="muted">· chair judge</span></span><code>judge1234</code></button>
+      <button data-e="judge2@veridict.local" data-p="judge1234">
+        <span>Miriam Osei <span class="muted">· panel judge</span></span><code>judge1234</code></button>
+    </div>
+  </div>
+
+  <footer class="footer">Veridict</footer>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+let mode = qs('mode') === 'register' ? 'register' : 'login';
+
+function render(){
+  const reg = mode === 'register';
+  $('#kicker').textContent = reg ? 'Get started' : 'Welcome back';
+  $('#title').textContent  = reg ? 'Create an account' : 'Sign in';
+  $('#sub').textContent    = reg
+    ? 'Judges and debaters can sign themselves up. Tab room access is granted by an organiser.'
+    : 'Your ballots and rounds are waiting.';
+  $('#submit').textContent = reg ? 'Create account' : 'Sign in';
+  $('#swap-text').textContent = reg ? 'Already registered?' : 'New here?';
+  $('#swap').textContent = reg ? 'Sign in instead' : 'Create an account';
+  $('#password').autocomplete = reg ? 'new-password' : 'current-password';
+  $$('.name-only').forEach(el => el.classList.toggle('hide', !reg));
+  $('#display_name').required = reg;
+  $('#demo-keys').hidden = reg;
+  clearError();
+}
+
+$('#swap').onclick = () => { mode = mode === 'login' ? 'register' : 'login'; render(); };
+
+$$('#demo-keys button').forEach(b => b.onclick = () => {
+  $('#email').value = b.dataset.e;
+  $('#password').value = b.dataset.p;
+  $('#password').focus();
+});
+
+$('#form').onsubmit = async e => {
+  e.preventDefault();
+  clearError();
+  const btn = $('#submit');
+  btn.disabled = true;
+  btn.textContent = mode === 'register' ? 'Creating account…' : 'Signing in…';
+
+  try {
+    if (mode === 'register') {
+      await api.post('/auth/register', {
+        email: $('#email').value.trim(),
+        password: $('#password').value,
+        display_name: $('#display_name').value.trim(),
+        institution: $('#institution').value.trim() || null,
+        role: $('input[name=role]:checked').value,
+      });
+    } else {
+      await api.post('/auth/login', {
+        email: $('#email').value.trim(),
+        password: $('#password').value,
+      });
+    }
+    location.href = qs('next') || '/app';
+  } catch (err) {
+    showError(err.message);
+    btn.disabled = false;
+    render();
+  }
+};
+
+mountNav('/login').then(u => { if (u) location.href = '/app'; });
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ballot — Veridict</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zilla+Slab:wght@500;600;700&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/app.css">
+<style>
+.motion-block{padding:22px 0 20px;border-bottom:1px solid var(--rule)}
+.motion-block h1{
+  font-size:clamp(22px,3vw,33px);max-width:24ch;margin-top:8px;line-height:1.2;
+}
+.motion-block h1::before{content:"“"}
+.motion-block h1::after{content:"”"}
+
+/* ---------- timer ---------- */
+.timer{background:var(--ink);color:var(--paper);border-radius:3px;
+  padding:20px 22px 22px;margin:22px 0 26px}
+.timer-top{display:flex;justify-content:space-between;align-items:flex-start;
+  gap:20px;flex-wrap:wrap;margin-bottom:16px}
+.timer-who .eyebrow{color:rgba(239,241,245,.55)}
+.timer-who strong{display:block;font-family:var(--display);font-size:20px;
+  font-weight:600;margin-top:3px}
+.readout{font-family:var(--mono);font-weight:700;
+  font-size:clamp(36px,6vw,52px);line-height:1;
+  font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.readout.warn{color:var(--amber)}
+.readout.over{color:#FF7A8C}
+
+.track{position:relative;height:38px;border:1px solid rgba(239,241,245,.28);
+  border-radius:2px;overflow:hidden;background:rgba(239,241,245,.05)}
+.protected{position:absolute;top:0;bottom:0;
+  background-image:repeating-linear-gradient(-45deg,
+    rgba(239,241,245,.20) 0 1px, transparent 1px 7px);
+  border-right:1px dashed rgba(239,241,245,.3)}
+.protected.tail{border-right:none;border-left:1px dashed rgba(239,241,245,.3)}
+.fill{position:absolute;top:0;bottom:0;left:0;width:0;background:rgba(239,241,245,.22)}
+.fill.warn{background:rgba(224,145,47,.42)}
+.fill.over{background:rgba(158,43,62,.55)}
+.playhead{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--paper);left:0}
+.tick{position:absolute;top:0;bottom:0;width:1px;background:rgba(239,241,245,.22)}
+.tick span{position:absolute;bottom:3px;left:4px;font-family:var(--mono);
+  font-size:9px;color:rgba(239,241,245,.5)}
+
+.legend{display:flex;gap:20px;flex-wrap:wrap;margin-top:11px;
+  font-family:var(--mono);font-size:10px;letter-spacing:.05em;
+  color:rgba(239,241,245,.6);text-transform:uppercase}
+.legend span{display:flex;align-items:center;gap:7px}
+.swatch{width:16px;height:9px;border:1px solid rgba(239,241,245,.35)}
+.swatch.hatch{background-image:repeating-linear-gradient(-45deg,
+  rgba(239,241,245,.45) 0 1px,transparent 1px 5px)}
+.swatch.amber{background:rgba(224,145,47,.6);border-color:transparent}
+
+.timer-controls{display:flex;gap:9px;margin-top:16px;flex-wrap:wrap;align-items:center}
+.tbtn{font-family:var(--mono);font-size:11px;letter-spacing:.08em;
+  text-transform:uppercase;background:transparent;color:var(--paper);
+  border:1px solid rgba(239,241,245,.35);padding:8px 15px;
+  border-radius:2px;cursor:pointer}
+.tbtn:hover{background:rgba(239,241,245,.1)}
+.tbtn.primary{background:var(--paper);color:var(--ink);
+  border-color:var(--paper);font-weight:700}
+.tbtn:disabled{opacity:.35;cursor:not-allowed}
+.hint{margin-left:auto;font-family:var(--mono);font-size:10px;
+  color:rgba(239,241,245,.45)}
+
+/* ---------- flow strip ---------- */
+.flow{display:grid;gap:1px;background:var(--rule);
+  border:1px solid var(--rule);border-radius:3px;
+  overflow:hidden;margin-bottom:32px}
+.flow-cell{background:var(--card);padding:11px 9px 12px;text-align:left;
+  border:none;border-top:3px solid transparent;cursor:pointer;font-family:inherit}
+.flow-cell:hover{background:#F7F8FB}
+.flow-cell[data-side="gov"]{border-top-color:var(--sage)}
+.flow-cell[data-side="opp"]{border-top-color:var(--claret)}
+.flow-cell .pos{font-family:var(--mono);font-size:9.5px;color:var(--ink-faint)}
+.flow-cell .abbr{font-family:var(--display);font-weight:600;font-size:16px;
+  display:block;margin:1px 0 2px}
+.flow-cell .who{font-size:11.5px;color:var(--ink-soft);display:block;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.flow-cell[aria-current="true"]{background:var(--ink)}
+.flow-cell[aria-current="true"] .abbr{color:var(--paper)}
+.flow-cell[aria-current="true"] .pos,
+.flow-cell[aria-current="true"] .who{color:rgba(239,241,245,.7)}
+.flow-cell.done .abbr::after{content:"✓";font-family:var(--body);
+  font-size:11px;color:var(--sage);margin-left:5px}
+
+/* ---------- criteria ---------- */
+.cols{display:grid;grid-template-columns:1fr 320px;gap:38px;align-items:start}
+.criterion{background:var(--card);border:1px solid var(--rule-soft);
+  border-radius:3px;padding:18px 20px 20px;margin-bottom:14px;box-shadow:var(--shadow)}
+.crit-head{display:flex;justify-content:space-between;align-items:baseline;gap:16px}
+.crit-val{font-family:var(--mono);font-weight:700;font-size:22px;
+  font-variant-numeric:tabular-nums}
+.crit-val small{font-size:11px;font-weight:400;color:var(--ink-faint)}
+.crit-desc{font-size:13px;color:var(--ink-soft);margin:5px 0 15px;max-width:58ch}
+
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;
+  height:22px;background:transparent;cursor:pointer;margin:0}
+input[type=range]::-webkit-slider-runnable-track{height:4px;background:var(--rule);border-radius:2px}
+input[type=range]::-moz-range-track{height:4px;background:var(--rule);border-radius:2px}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;
+  width:16px;height:16px;border-radius:50%;background:var(--ink);
+  border:3px solid var(--card);box-shadow:0 0 0 1px var(--ink);margin-top:-6px}
+input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;
+  background:var(--ink);border:3px solid var(--card);box-shadow:0 0 0 1px var(--ink)}
+
+.band{margin-top:11px;padding:10px 13px;background:var(--paper);
+  border-left:2px solid var(--amber);font-size:12.5px;color:var(--ink-soft)}
+.band b{font-family:var(--mono);font-size:10px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--ink);display:block;margin-bottom:2px}
+
+/* ---------- ranking ---------- */
+.rank-row{display:flex;align-items:center;gap:12px;background:var(--card);
+  border:1px solid var(--rule-soft);border-left:3px solid var(--rule);
+  border-radius:3px;padding:11px 14px;margin-bottom:8px}
+.rank-row .slot{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--ink-faint)}
+.rank-row .tname{font-weight:600;font-size:14px;display:block}
+.rank-pick{display:flex;gap:5px;margin-left:auto}
+.rank-pick button{width:29px;height:29px;font-family:var(--mono);
+  font-size:12px;font-weight:700;border:1px solid var(--rule);
+  background:var(--card);color:var(--ink-faint);border-radius:2px;cursor:pointer}
+.rank-pick button:hover{border-color:var(--ink);color:var(--ink)}
+.rank-pick button[aria-pressed="true"]{background:var(--ink);
+  color:var(--paper);border-color:var(--ink)}
+
+/* ---------- aside ---------- */
+.aside{position:sticky;top:22px;display:flex;flex-direction:column;gap:16px}
+.tally h3{font-family:var(--mono);font-size:10px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--ink-faint);margin:0 0 13px;font-weight:500}
+.tally-row{display:flex;justify-content:space-between;align-items:baseline;
+  padding:7px 0;border-bottom:1px solid var(--rule-soft);font-size:13.5px}
+.tally-row:last-of-type{border-bottom:none}
+.tally-row b{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:500}
+.tally-total{display:flex;justify-content:space-between;align-items:baseline;
+  margin-top:11px;padding-top:12px;border-top:2px solid var(--ink)}
+.tally-total span{font-family:var(--display);font-weight:600;font-size:15px}
+.tally-total b{font-family:var(--mono);font-size:27px;font-weight:700;
+  font-variant-numeric:tabular-nums}
+.saved{font-family:var(--mono);font-size:10px;color:var(--ink-faint);
+  letter-spacing:.06em;text-transform:uppercase}
+.submit-note{font-size:11.5px;color:var(--ink-faint);text-align:center;
+  margin-top:9px;line-height:1.45}
+
+@media (max-width:900px){
+  .cols{grid-template-columns:1fr;gap:28px}
+  .aside{position:static}
+}
+</style>
+</head>
+<body>
+<div class="shell">
+  <header class="masthead" id="masthead"></header>
+
+  <div class="notice" id="error" hidden></div>
+  <div id="page" hidden>
+
+    <section class="motion-block">
+      <div class="spread">
+        <span class="eyebrow" id="round-label">Round</span>
+        <span class="saved" id="saved"></span>
+      </div>
+      <h1 id="motion">…</h1>
+    </section>
+
+    <section class="timer" aria-label="Speech timer">
+      <div class="timer-top">
+        <div class="timer-who">
+          <span class="eyebrow">Now speaking · <span id="t-pos"></span></span>
+          <strong id="t-name"></strong>
+        </div>
+        <div class="readout" id="t-read">0:00</div>
+      </div>
+
+      <div class="track" id="track">
+        <div class="fill" id="t-fill"></div>
+        <div class="protected head" id="p-head"></div>
+        <div class="protected tail" id="p-tail"></div>
+        <div class="playhead" id="t-head"></div>
+      </div>
+
+      <div class="legend">
+        <span><i class="swatch hatch"></i> Protected — no points of information</span>
+        <span><i class="swatch amber"></i> Final minute</span>
+        <span><i class="swatch"></i> Open floor</span>
+      </div>
+
+      <div class="timer-controls">
+        <button class="tbtn primary" id="t-toggle">Start speech</button>
+        <button class="tbtn" id="t-reset">Reset</button>
+        <button class="tbtn" id="t-next">Next speaker</button>
+        <span class="hint" id="t-hint">Space to start or pause</span>
+      </div>
+    </section>
+
+    <nav class="flow" id="flow" aria-label="Speech order"></nav>
+
+    <div class="cols">
+      <main>
+        <div class="section-head">
+          <h2>Score this speech</h2>
+          <span class="eyebrow" id="scoring-for"></span>
+        </div>
+        <div id="criteria"></div>
+
+        <div id="rank-block">
+          <div class="section-head mt-3">
+            <h2>Rank the teams</h2>
+            <span class="eyebrow" id="rank-hint"></span>
+          </div>
+          <div id="ranks"></div>
+        </div>
+      </main>
+
+      <aside class="aside">
+        <div class="card tally">
+          <h3>Speaker total</h3>
+          <div id="tally-rows"></div>
+          <div class="tally-total"><span>Score</span><b id="tally-total">0</b></div>
+        </div>
+
+        <div class="card tally">
+          <h3>Reason for decision</h3>
+          <textarea id="rfd" placeholder="What actually decided this round? Write it while it's fresh — this is what the losing team will read."></textarea>
+        </div>
+
+        <div>
+          <button class="btn full" id="submit">Submit ballot</button>
+          <p class="submit-note" id="submit-note"></p>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <footer class="footer">Veridict</footer>
+</div>
+
+<script src="/js/app.js"></script>
+<script src="/js/ballot.js"></script>
+</body>
+</html>
