@@ -38,7 +38,9 @@ async function mountNav(current) {
   try { user = (await api.get('/auth/me')).user; } catch { /* signed out */ }
 
   const links = user
-    ? [['/app', 'Tournaments'], ...(user.role === 'admin' ? [['/tab', 'Tab room']] : [])]
+    ? [['/app', 'Tournaments'],
+       ...(user.role === 'admin' ? [['/tab', 'Tab room'], ['/consent', 'Consent']] : []),
+       ...(user.role === 'debater' ? [['/me', 'My speeches']] : [])]
     : [];
 
   const el = $('#masthead');

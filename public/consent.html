@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Recording consent — Veridict</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zilla+Slab:wght@500;600;700&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/app.css">
+<style>
+.cols{display:grid;grid-template-columns:1fr 300px;gap:38px;align-items:start}
+.status{
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;
+  text-transform:uppercase;padding:3px 8px;border-radius:2px;border:1px solid var(--rule);
+}
+.status.granted{background:var(--sage);border-color:var(--sage);color:#fff}
+.status.withheld{background:var(--claret);border-color:var(--claret);color:#fff}
+.status.pending{background:var(--paper);color:var(--ink-soft)}
+.minor{
+  font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--amber);margin-left:7px;
+}
+.acts{display:flex;gap:5px;justify-content:flex-end}
+.acts button{
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;
+  padding:5px 9px;border:1px solid var(--rule);background:var(--card);
+  color:var(--ink-soft);border-radius:2px;cursor:pointer;
+}
+.acts button:hover{border-color:var(--ink);color:var(--ink)}
+.usage b{font-family:var(--mono);font-size:24px;font-variant-numeric:tabular-nums;display:block}
+@media (max-width:860px){.cols{grid-template-columns:1fr;gap:28px}}
+</style>
+</head>
+<body>
+<div class="shell">
+  <header class="masthead" id="masthead"></header>
+
+  <div class="mt-3">
+    <span class="eyebrow">Organiser tools</span>
+    <h1>Recording consent</h1>
+    <p class="lede">A speech is only recorded if the speaker's consent is on file.
+      Marking someone withheld deletes any audio already captured of them.</p>
+  </div>
+
+  <div class="notice" id="error" hidden></div>
+
+  <div class="cols mt-3">
+    <main>
+      <div class="section-head"><h2>Speakers</h2>
+        <span class="eyebrow" id="count"></span></div>
+      <div class="card"><div id="list"></div></div>
+    </main>
+
+    <aside>
+      <div class="section-head"><h2>Storage</h2></div>
+      <div class="card usage" id="usage"></div>
+
+      <div class="card mt-2">
+        <h3 style="font-size:15px;margin-bottom:8px">Under-18 speakers</h3>
+        <p class="small muted" style="margin:0">
+          Granting consent for a minor asks for the name of the parent or
+          guardian who gave it, and stores it against the record.
+        </p>
+      </div>
+    </aside>
+  </div>
+
+  <footer class="footer">Veridict</footer>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+(async () => {
+  const user = await requireUser(['admin']);
+  if (!user) return;
+  await mountNav('/consent');
+
+  const mb = b => (b / 1048576).toFixed(1) + ' MB';
+
+  async function load() {
+    const { consent } = await api.get('/recordings/consent');
+    $('#count').textContent =
+      `${consent.filter(c => c.status === 'granted').length} of ${consent.length} consented`;
+
+    $('#list').innerHTML = consent.length ? `
+      <table>
+        <thead><tr><th>Speaker</th><th>Status</th><th style="text-align:right">Change</th></tr></thead>
+        <tbody>${consent.map(c => `
+          <tr>
+            <td>
+              <b>${esc(c.display_name)}</b>${c.is_minor ? '<span class="minor">Under 18</span>' : ''}
+              <br><span class="small muted">${esc(c.guardian_name || c.email)}</span>
+            </td>
+            <td><span class="status ${esc(c.status)}">${esc(c.status)}</span></td>
+            <td>
+              <div class="acts">
+                ${c.status !== 'granted' ? `<button data-u="${c.id}" data-s="granted" data-m="${c.is_minor}" data-n="${esc(c.display_name)}">Grant</button>` : ''}
+                ${c.status !== 'withheld' ? `<button data-u="${c.id}" data-s="withheld" data-m="${c.is_minor}" data-n="${esc(c.display_name)}">Withhold</button>` : ''}
+              </div>
+            </td>
+          </tr>`).join('')}
+        </tbody>
+      </table>` : '<p class="muted small" style="margin:0">No debaters registered yet.</p>';
+
+    $$('.acts button').forEach(b => b.onclick = async () => {
+      clearError();
+      const isMinor = b.dataset.m === '1' || b.dataset.m === 'true';
+      let guardian = null;
+
+      if (b.dataset.s === 'granted' && isMinor) {
+        guardian = prompt(
+          `${b.dataset.n} is under 18. Enter the name of the parent or guardian who gave consent:`);
+        if (!guardian) return;
+      }
+      if (b.dataset.s === 'withheld') {
+        if (!confirm(`Withhold consent for ${b.dataset.n}? Any recordings of them will be deleted.`)) return;
+      }
+
+      try {
+        const r = await api.put('/recordings/consent/' + b.dataset.u, {
+          status: b.dataset.s, is_minor: isMinor, guardian_name: guardian,
+        });
+        if (r.deleted) showOk(`Consent updated. ${r.deleted} recording(s) deleted.`);
+        else showOk('Consent updated.');
+        await load(); await usage();
+      } catch (e) { showError(e.message); }
+    });
+  }
+
+  async function usage() {
+    const u = await api.get('/recordings/usage');
+    $('#usage').innerHTML = `
+      <span class="eyebrow">Audio stored</span>
+      <b>${mb(u.bytes)}</b>
+      <p class="small muted" style="margin:6px 0 0">
+        ${u.files} clip${u.files === 1 ? '' : 's'} ·
+        ${u.retention_days ? `kept ${u.retention_days} days` : 'kept indefinitely'}
+      </p>`;
+  }
+
+  await load(); await usage();
+})().catch(e => showError(e.message));
+</script>
+</body>
+</html>

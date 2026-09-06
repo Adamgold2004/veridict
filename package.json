@@ -7,7 +7,8 @@
     "start": "node server/index.js",
     "seed": "node server/seed.js",
     "dev": "node --watch server/index.js",
-    "test": "node test-frontend.js"
+    "test": "node test-frontend.js",
+    "prune": "node server/prune.js"
   },
   "keywords": [],
   "author": "",

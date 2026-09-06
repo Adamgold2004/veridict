@@ -154,3 +154,44 @@ CREATE INDEX IF NOT EXISTS idx_ballots_round ON ballots(round_id);
 CREATE INDEX IF NOT EXISTS idx_scores_ballot ON ballot_scores(ballot_id);
 CREATE INDEX IF NOT EXISTS idx_rounds_tournament ON rounds(tournament_id);
 CREATE INDEX IF NOT EXISTS idx_speeches_format ON format_speeches(format_id);
+
+-- ============================================================
+-- Recording consent
+-- ============================================================
+-- Debate clubs are frequently mixed-age. Consent is stored per
+-- speaker and checked before any audio is captured, so an
+-- unconsented speaker's microphone is never opened rather than
+-- being recorded and filtered later.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS recording_consent (
+  user_id      TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  -- 'granted' | 'withheld' | 'pending'
+  status       TEXT NOT NULL DEFAULT 'pending',
+  is_minor     INTEGER NOT NULL DEFAULT 0,
+  -- For under-18s, who gave it and how it was collected.
+  guardian_name   TEXT,
+  guardian_email  TEXT,
+  collected_by    TEXT REFERENCES users(id),
+  note            TEXT,
+  updated_at   TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS recordings (
+  id            TEXT PRIMARY KEY,
+  round_id      TEXT NOT NULL REFERENCES rounds(id) ON DELETE CASCADE,
+  speech_position INTEGER NOT NULL,
+  -- Who is speaking. Null only if the slot was unassigned.
+  speaker_id    TEXT REFERENCES users(id) ON DELETE SET NULL,
+  recorded_by   TEXT NOT NULL REFERENCES users(id),
+  filename      TEXT NOT NULL,
+  mime_type     TEXT NOT NULL DEFAULT 'audio/webm',
+  bytes         INTEGER NOT NULL,
+  duration_sec  INTEGER,
+  created_at    TEXT NOT NULL,
+  -- Recordings are deleted after this date by `npm run prune`.
+  expires_at    TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_rec_round ON recordings(round_id);
+CREATE INDEX IF NOT EXISTS idx_rec_speaker ON recordings(speaker_id);

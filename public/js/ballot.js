@@ -16,6 +16,7 @@
   let timer = { running: 0, elapsed: 0, startedAt: null };
   const scores = {};   // position -> { criterionId: value }
   const ranks = {};    // teamId -> rank
+  const feedback = {}; // position -> { strengths, improvements }
   let saveTimer = null;
 
   // ---------- load ----------
@@ -39,6 +40,7 @@
       (scores[s.speech_position] ||= {})[s.criterion_id] = Number(s.score);
     }
     for (const r of b.rankings) ranks[r.team_id] = r.rank;
+    for (const f of (b.feedback || [])) feedback[f.speech_position] = f;
     if (ballot.reasoning) $('#rfd').value = ballot.reasoning;
   } catch (err) {
     showError(err.message);
@@ -142,6 +144,11 @@
   }
 
   function applyTimer(s) {
+    // Audio follows the clock: a running speech is a recording speech.
+    if (rec?.state.armed) {
+      if (s.timer_running && !rec.state.recording) rec.start(s.active_speech_position || current);
+      if (!s.timer_running && rec.state.recording) rec.stop();
+    }
     timer = {
       running: s.timer_running ? 1 : 0,
       elapsed: s.speech_elapsed_sec || 0,
@@ -149,14 +156,15 @@
     };
     if (s.active_speech_position && s.active_speech_position !== current) {
       current = s.active_speech_position;
-      drawTrack(); drawFlow(); drawCriteria();
+      drawTrack(); drawFlow(); drawCriteria(); drawFeedback();
     }
     paint();
   }
 
   function goTo(pos) {
+    if (rec?.state.recording) rec.stop();   // close the clip before moving on
     current = pos;
-    drawTrack(); drawFlow(); drawCriteria(); paint();
+    drawTrack(); drawFlow(); drawCriteria(); drawFeedback(); paint();
     if (isChair) timerAction('goto', pos);
   }
 
@@ -295,6 +303,70 @@
     return slot % 2 === 1 ? 'Proposition' : 'Opposition';
   }
 
+  // ---------- per-speech feedback ----------
+  let fbTimer = null;
+
+  function drawFeedback() {
+    const sp = speech();
+    const f = feedback[current] || {};
+    $('#fb-who').textContent = sp.speaker_name || sp.label;
+    $('#fb-strengths').value = f.strengths || '';
+    $('#fb-improve').value = f.improvements || '';
+    $('#fb-strengths').disabled = locked;
+    $('#fb-improve').disabled = locked;
+  }
+
+  function queueFeedback() {
+    clearTimeout(fbTimer);
+    const pos = current;
+    feedback[pos] = {
+      speech_position: pos,
+      strengths: $('#fb-strengths').value,
+      improvements: $('#fb-improve').value,
+    };
+    fbTimer = setTimeout(() => {
+      api.put(`/ballots/${ballot.id}/feedback`, feedback[pos]).catch(() => {});
+    }, 800);
+  }
+  $('#fb-strengths').oninput = queueFeedback;
+  $('#fb-improve').oninput = queueFeedback;
+
+  // ---------- recording ----------
+  let rec = null;
+
+  async function setupRecorder() {
+    rec = createRecorder({
+      roundId, speeches,
+      onState: s => {
+        const box = $('#rec');
+        box.classList.toggle('on', s.recording);
+        $('#rec-label').innerHTML = s.uploading ? 'Saving clip…'
+          : s.recording ? '<b>Recording</b>'
+          : s.armed ? 'Ready — starts with the speech'
+          : 'Recording off';
+        $('#rec-toggle').textContent = s.armed ? 'Turn off recording' : 'Turn on recording';
+        $('#rec-warn').textContent = s.error || '';
+      },
+    });
+
+    if (!rec.state.supported) return;
+    $('#rec').hidden = false;
+
+    try {
+      const rows = await rec.loadConsent();
+      const blocked = rows.filter(r => r.status !== 'granted');
+      if (blocked.length) {
+        $('#rec-warn').textContent =
+          `${blocked.length} speaker${blocked.length === 1 ? '' : 's'} not consented`;
+      }
+    } catch { /* consent endpoint unavailable; recorder stays off */ }
+
+    $('#rec-toggle').onclick = async () => {
+      if (rec.state.armed) rec.disarm();
+      else await rec.arm();
+    };
+  }
+
   // ---------- reasoning ----------
   let rfdTimer = null;
   $('#rfd').disabled = locked;
@@ -352,6 +424,9 @@
   };
 
   // ---------- go ----------
-  drawTrack(); drawFlow(); drawCriteria(); drawRanks(); checkReady(); paint();
+  drawTrack(); drawFlow(); drawCriteria(); drawRanks(); drawFeedback();
+  checkReady(); paint();
+  if (!locked) setupRecorder();
   window.addEventListener('resize', drawFlow);
+  window.addEventListener('beforeunload', () => rec?.disarm());
 })();

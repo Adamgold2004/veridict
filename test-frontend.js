@@ -111,6 +111,16 @@ async function loadPage(path, cookie, checks) {
     ['slot labels', '#ranks', 'Opening Government'],
     ['timer', '#t-name', 'Prime Minister'],
     ['tally', '#tally-total']]);
+  ok &= await loadPage('/consent', admin, [
+    ['speaker list', '#list', 'Amara'],
+    ['consent status', '#list', 'granted'],
+    ['storage usage', '#usage', 'MB']]);
+  ok &= await loadPage('/me', judge, [
+    ['heading', 'h1', 'My speeches'],
+    ['list renders', '#list']]);
+  ok &= await loadPage('/ballot?round=' + rid, judge, [
+    ['recorder panel', '#rec-label'],
+    ['feedback fields', '#fb-who']]);
   ok &= await loadPage('/tab', admin, [
     ['rounds', '#rounds', 'internships'],
     ['slot allocation', '#slots', 'Opening Government'],

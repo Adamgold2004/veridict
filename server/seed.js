@@ -220,6 +220,26 @@ async function main() {
       [uid, email, bcrypt.hashSync('debate1234', 10), name, 'Veridict Demo', 'debater', now()]
     );
   }
+  // Consent for demo speakers. Two are left unconsented on purpose so the
+  // recorder's gate is visible without having to construct the case.
+  for (let i = 0; i < speakerIds.length; i++) {
+    const minor = i >= 4;                 // second half are under 18
+    const granted = i < 6;                // last two withheld
+    await db.run(
+      `INSERT INTO recording_consent
+       (user_id,status,is_minor,guardian_name,guardian_email,collected_by,note,updated_at)
+       VALUES (?,?,?,?,?,?,?,?)`,
+      [speakerIds[i],
+       granted ? 'granted' : 'pending',
+       minor ? 1 : 0,
+       minor && granted ? 'Guardian on file' : null,
+       null,
+       userIds['admin@veridict.local'],
+       granted ? null : 'Awaiting form',
+       now()]
+    );
+  }
+
   console.log('Users created.');
 
   // -------- demo tournament --------

@@ -19,6 +19,7 @@ app.use('/api/formats', require('./routes/formats'));
 app.use('/api/tournaments', require('./routes/tournaments'));
 app.use('/api/rounds', require('./routes/rounds').router);
 app.use('/api/ballots', require('./routes/ballots'));
+app.use('/api/recordings', require('./routes/recordings'));
 
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, engine: db.isPg ? 'postgres' : 'sqlite' });

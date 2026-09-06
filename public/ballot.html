@@ -145,6 +145,21 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;
 .submit-note{font-size:11.5px;color:var(--ink-faint);text-align:center;
   margin-top:9px;line-height:1.45}
 
+/* ---------- recorder ---------- */
+.rec{display:flex;align-items:center;gap:12px;margin-top:14px;
+  padding-top:14px;border-top:1px solid rgba(239,241,245,.18);flex-wrap:wrap}
+.rec .dot{width:9px;height:9px;border-radius:50%;background:rgba(239,241,245,.3);flex:none}
+.rec.on .dot{background:#FF5A6E}
+.rec .label{font-family:var(--mono);font-size:10px;letter-spacing:.08em;
+  text-transform:uppercase;color:rgba(239,241,245,.6)}
+.rec .label b{color:var(--paper);font-weight:700}
+.rec-warn{font-family:var(--mono);font-size:10px;letter-spacing:.05em;
+  color:var(--amber);text-transform:uppercase}
+
+/* ---------- feedback ---------- */
+.fb label{margin-top:12px}
+.fb textarea{min-height:70px}
+
 @media (max-width:900px){
   .cols{grid-template-columns:1fr;gap:28px}
   .aside{position:static}
@@ -194,6 +209,13 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;
         <button class="tbtn" id="t-next">Next speaker</button>
         <span class="hint" id="t-hint">Space to start or pause</span>
       </div>
+
+      <div class="rec" id="rec" hidden>
+        <span class="dot"></span>
+        <span class="label" id="rec-label">Recording off</span>
+        <button class="tbtn" id="rec-toggle">Turn on recording</button>
+        <span class="rec-warn" id="rec-warn"></span>
+      </div>
     </section>
 
     <nav class="flow" id="flow" aria-label="Speech order"></nav>
@@ -222,6 +244,14 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;
           <div class="tally-total"><span>Score</span><b id="tally-total">0</b></div>
         </div>
 
+        <div class="card tally fb">
+          <h3>Feedback for <span id="fb-who">this speaker</span></h3>
+          <label for="fb-strengths">What worked</label>
+          <textarea id="fb-strengths" placeholder="Name the specific moment, not the general quality."></textarea>
+          <label for="fb-improve">What to change</label>
+          <textarea id="fb-improve" placeholder="One thing they could do differently next round."></textarea>
+        </div>
+
         <div class="card tally">
           <h3>Reason for decision</h3>
           <textarea id="rfd" placeholder="What actually decided this round? Write it while it's fresh — this is what the losing team will read."></textarea>
@@ -239,6 +269,7 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;
 </div>
 
 <script src="/js/app.js"></script>
+<script src="/js/recorder.js"></script>
 <script src="/js/ballot.js"></script>
 </body>
 </html>
