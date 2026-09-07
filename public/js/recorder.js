@@ -14,6 +14,7 @@ function createRecorder({ roundId, speeches, onState }) {
   let chunks = [];
   let activePosition = null;
   let startedAt = null;
+  let uploadPromise = Promise.resolve();
   let consent = {};          // userId -> 'granted' | 'withheld' | 'pending'
   let speakerOf = {};        // position -> { id, name }
   const state = { supported: false, armed: false, recording: false, error: null };
@@ -96,11 +97,16 @@ function createRecorder({ roundId, speeches, onState }) {
       audioBitsPerSecond: 32000,
     });
     recorder.ondataavailable = e => e.data.size && chunks.push(e.data);
-    recorder.onstop = () => upload(activePosition, mime);
-    recorder.start(1000);
-
+    recorder.onstop = () => {
+      const positionToUpload = activePosition;
+      const started = startedAt;
+      const clip = chunks;
+      chunks = [];
+      uploadPromise = uploadPromise.then(() => upload(positionToUpload, started, mime, clip));
+    };
     activePosition = position;
     startedAt = Date.now();
+    recorder.start(1000);
     push({ recording: true, error: null });
   }
 
@@ -109,11 +115,10 @@ function createRecorder({ roundId, speeches, onState }) {
     push({ recording: false });
   }
 
-  async function upload(position, mime) {
-    if (!chunks.length) return;
-    const blob = new Blob(chunks, { type: mime || 'audio/webm' });
-    chunks = [];
-    const seconds = Math.round((Date.now() - startedAt) / 1000);
+  async function upload(position, started, mime, clip) {
+    if (!clip.length) return;
+    const blob = new Blob(clip, { type: mime || 'audio/webm' });
+    const seconds = Math.round((Date.now() - started) / 1000);
 
     push({ uploading: true });
     try {

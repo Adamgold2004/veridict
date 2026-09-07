@@ -21,8 +21,12 @@
 
   // ---------- load ----------
   try {
-    round = (await api.get('/rounds/' + roundId)).round;
-    const b = await api.get('/ballots/round/' + roundId);
+    const [roundResponse, ballotResponse] = await Promise.all([
+      api.get('/rounds/' + roundId),
+      api.get('/ballots/round/' + roundId),
+    ]);
+    round = roundResponse.round;
+    const b = ballotResponse;
     ballot = b.ballot;
 
     criteria = round.criteria;
@@ -47,7 +51,28 @@
     return;
   }
 
+  async function loadRecordings() {
+    const panel = $('#recordings-panel');
+    const list = $('#recordings-list');
+    try {
+      const { recordings } = await api.get('/recordings/round/' + roundId);
+      if (!recordings.length) return;
+      list.innerHTML = recordings.map(r => `
+        <div class="recording-row">
+          <div>
+            <b>Speech ${r.speech_position}</b>
+            <span class="small muted">${esc(r.speaker_name || 'Unassigned')}</span>
+          </div>
+          <audio controls preload="none" src="/api/recordings/${r.id}/audio"></audio>
+        </div>`).join('');
+      panel.hidden = false;
+    } catch {
+      // Recording access is optional and should never block the ballot.
+    }
+  }
+
   $('#page').hidden = false;
+  loadRecordings();
   $('#round-label').textContent =
     `Round ${round.sequence} · ${round.format_short}${round.room ? ' · ' + round.room : ''}`;
   $('#motion').textContent = round.motion;
