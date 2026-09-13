@@ -10,25 +10,52 @@
  */
 const path = require('path');
 const fs = require('fs');
+const dns = require('dns').promises;
 
-// Render (and several other hosts) have no outbound IPv6 route. Supabase's
-// pooler hostname is dual-stack, and Node will happily pick the IPv6 address
-// if the OS resolver offers it first — which then fails with ENETUNREACH.
-// Forcing IPv4 first here fixes that without touching the connection string.
-require('dns').setDefaultResultOrder('ipv4first');
-
+// Render's base image resolves hostnames via musl libc's getaddrinfo, which
+// (unlike glibc) doesn't fall back to IPv4 — for a dual-stack host like
+// Supabase's pooler it hands back the AAAA record and nothing else. Render
+// has no outbound IPv6 route, so that connection fails with ENETUNREACH.
+// setDefaultResultOrder('ipv4first') can't fix this: it only reorders
+// addresses musl already returned, and musl never returned an A record here.
+//
+// So we skip the OS resolver for this one lookup and use Node's own bundled
+// resolver (dns.resolve4, backed by c-ares) to get the A record directly,
+// then connect to that IP. servername is kept as the original host so TLS
+// SNI and certificate hostname checks still work against the real hostname.
 const PG_URL = process.env.DATABASE_URL;
 const isPg = !!PG_URL;
 
 let sqlite = null;
 let pgPool = null;
+let ready = Promise.resolve();
 
 if (isPg) {
   const { Pool } = require('pg');
-  pgPool = new Pool({
-    connectionString: PG_URL,
-    ssl: PG_URL.includes('localhost') ? false : { rejectUnauthorized: false },
-  });
+  const { parse } = require('pg-connection-string');
+  const parsed = parse(PG_URL);
+  const useSsl = !PG_URL.includes('localhost');
+
+  ready = (async () => {
+    let host = parsed.host;
+    try {
+      const addresses = await dns.resolve4(parsed.host);
+      if (addresses[0]) host = addresses[0];
+    } catch (err) {
+      // No A record available (e.g. local/dev DNS quirks) — fall back to
+      // letting the OS resolver handle it, same as before this change.
+      console.warn(`[db] dns.resolve4(${parsed.host}) failed, falling back to OS resolver:`, err.message);
+    }
+
+    pgPool = new Pool({
+      host,
+      port: parsed.port ? Number(parsed.port) : 5432,
+      user: parsed.user,
+      password: parsed.password,
+      database: parsed.database,
+      ssl: useSsl ? { rejectUnauthorized: false, servername: parsed.host } : false,
+    });
+  })();
 } else {
   const Database = require('better-sqlite3');
   const dir = path.join(__dirname, '..', 'db');
@@ -46,6 +73,7 @@ function toPg(sql) {
 
 async function all(sql, params = []) {
   if (isPg) {
+    await ready;
     const r = await pgPool.query(toPg(sql), params);
     return r.rows;
   }
@@ -54,6 +82,7 @@ async function all(sql, params = []) {
 
 async function get(sql, params = []) {
   if (isPg) {
+    await ready;
     const r = await pgPool.query(toPg(sql), params);
     return r.rows[0] || null;
   }
@@ -62,6 +91,7 @@ async function get(sql, params = []) {
 
 async function run(sql, params = []) {
   if (isPg) {
+    await ready;
     const r = await pgPool.query(toPg(sql), params);
     return { changes: r.rowCount };
   }
@@ -72,6 +102,7 @@ async function run(sql, params = []) {
 /** Run several statements as a unit. fn receives nothing; use await. */
 async function tx(fn) {
   if (isPg) {
+    await ready;
     const c = await pgPool.connect();
     try {
       await c.query('BEGIN');
@@ -98,6 +129,7 @@ async function tx(fn) {
 
 async function exec(sqlText) {
   if (isPg) {
+    await ready;
     await pgPool.query(sqlText);
   } else {
     sqlite.exec(sqlText);
