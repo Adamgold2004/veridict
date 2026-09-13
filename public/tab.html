@@ -25,6 +25,14 @@
 .rnd.completed{border-left-color:var(--sage)}
 .rnd .m{font-family:var(--display);font-size:15px;font-weight:600;margin:5px 0 10px}
 .rnd .acts{display:flex;gap:7px;flex-wrap:wrap}
+
+@media (max-width:860px){
+  .cols{grid-template-columns:1fr;gap:28px}
+}
+@media (max-width:480px){
+  .slotrow{flex-wrap:wrap}
+  .slotrow .lbl{min-width:100%}
+}
 </style>
 </head>
 <body>
