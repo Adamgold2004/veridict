@@ -11,6 +11,12 @@
 const path = require('path');
 const fs = require('fs');
 
+// Render (and several other hosts) have no outbound IPv6 route. Supabase's
+// pooler hostname is dual-stack, and Node will happily pick the IPv6 address
+// if the OS resolver offers it first — which then fails with ENETUNREACH.
+// Forcing IPv4 first here fixes that without touching the connection string.
+require('dns').setDefaultResultOrder('ipv4first');
+
 const PG_URL = process.env.DATABASE_URL;
 const isPg = !!PG_URL;
 
